@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PipelinePulse CRM</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
+    header { background: #1a1a2e; color: white; padding: 20px; text-align: center; }
+    nav { background: #16213e; padding: 10px; text-align: center; }
+    nav a { color: white; margin: 0 15px; text-decoration: none; font-weight: bold; }
+    section { padding: 20px; }
+    .card { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .stats { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+    .stat { flex: 1; min-width: 200px; background: #e0eaff; border-left: 5px solid #007bff; padding: 15px; border-radius: 6px; }
+    .stat h3 { margin: 0 0 10px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background: #007bff; color: white; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    .green { background: #d4edda; }
+    .yellow { background: #fff3cd; }
+    .orange { background: #ffe5b4; }
+    .red { background: #f8d7da; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/tabletop@1.6.0/tabletop.min.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1>PipelinePulse CRM</h1>
+  </header>
+
+  <nav>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#leads">All Leads</a>
+    <a href="#followups">Follow-Ups</a>
+  </nav>
+
+  <section id="dashboard">
+    <div class="stats">
+      <div class="stat">
+        <h3>Leads to Contact Today</h3>
+        <p id="contactToday">Loading...</p>
+      </div>
+      <div class="stat">
+        <h3>Sold Leads (This Month)</h3>
+        <p id="soldThisMonth">Loading...</p>
+      </div>
+      <div class="stat">
+        <h3>Appointments Today</h3>
+        <p id="appointmentsToday">Loading...</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="leads">
+    <h2>All Leads</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Follow-Up</th><th>Appointment</th><th>Last Contact</th>
+          </tr>
+        </thead>
+        <tbody id="leads-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="followups">
+    <h2>Urgent Follow-Ups</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Phone</th><th>Last Contact</th><th>Days Since</th><th>Urgency</th>
+          </tr>
+        </thead>
+        <tbody id="followups-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', init);
+
+    function init() {
+      Tabletop.init({
+        key: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTuS0WAznIR6dEbBgSNUXJyLTOxyl5FGYcZWU0D-_BBYviM6ZsUvwnk2zR8V9-01w_Dsq8UbtHy7uqb/pubhtml',
+        callback: showData,
+        simpleSheet: true
+      });
+    }
+
+    function showData(data) {
+      const leadsTable = document.getElementById('leads-table-body');
+      const followupTable = document.getElementById('followups-table-body');
+      const today = new Date().toISOString().split('T')[0];
+      let contactToday = 0, soldCount = 0, apptToday = 0;
+
+      data.forEach(row => {
+        const lastContact = new Date(row['Last Contact']);
+        const followUpDate = new Date(row['Follow-Up Date']);
+        const appointmentDate = new Date(row['Appointment Date']);
+        const todayDate = new Date();
+
+        // Leads table
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.Name}</td><td>${row.Phone}</td><td>${row.Email}</td>
+          <td>${row.Status}</td><td>${row['Follow-Up Date']}</td>
+          <td>${row['Appointment Date']}</td><td>${row['Last Contact']}</td>`;
+        leadsTable.appendChild(tr);
+
+        // Dashboard Stats
+        if (row['Follow-Up Date'] && sameDate(followUpDate, todayDate)) contactToday++;
+        if (row.Status.toLowerCase() === 'sold' && appointmentDate.getMonth() === todayDate.getMonth()) soldCount++;
+        if (row['Appointment Date'] && sameDate(appointmentDate, todayDate)) apptToday++;
+
+        // Follow-up logic
+        const daysSince = Math.floor((todayDate - lastContact) / (1000 * 60 * 60 * 24));
+        let urgency = '';
+        let urgencyClass = '';
+        if (!row['Last Contact']) {
+          urgency = 'No contact';
+          urgencyClass = 'red';
+        } else if (daysSince <= 1) {
+          urgency = 'Fresh';
+          urgencyClass = 'green';
+        } else if (daysSince <= 3) {
+          urgency = 'Follow soon';
+          urgencyClass = 'yellow';
+        } else if (daysSince <= 5) {
+          urgency = 'Urgent';
+          urgencyClass = 'orange';
+        } else {
+          urgency = 'Critical';
+          urgencyClass = 'red';
+        }
+
+        const ftr = document.createElement('tr');
+        ftr.className = urgencyClass;
+        ftr.innerHTML = `
+          <td>${row.Name}</td><td>${row.Phone}</td>
+          <td>${row['Last Contact'] || '—'}</td>
+          <td>${isNaN(daysSince) ? '—' : daysSince}</td>
+          <td>${urgency}</td>`;
+        followupTable.appendChild(ftr);
+      });
+
+      document.getElementById('contactToday').innerText = contactToday;
+      document.getElementById('soldThisMonth').innerText = soldCount;
+      document.getElementById('appointmentsToday').innerText = apptToday;
+    }
+
+    function sameDate(d1, d2) {
+      return d1.getFullYear() === d2.getFullYear() &&
+             d1.getMonth() === d2.getMonth() &&
+             d1.getDate() === d2.getDate();
+    }
+  </script>
+
+</body>
+</html>
